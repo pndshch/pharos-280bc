@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>Pharos — 280 BC | ファロスの灯台</title>
+<meta name="description" content="ファロスの灯台の光を操り、船を安全に港へ導け。紀元前280年、古代アレクサンドリア。Guide ships through the darkness with the legendary Pharos lighthouse.">
+<meta property="og:title" content="Pharos — 280 BC">
+<meta property="og:description" content="古代アレクサンドリアの灯台で船を導くゲーム">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#060e1a;touch-action:none;user-select:none;-webkit-user-select:none}
+canvas{display:block;width:100%;height:100%}
+
+.overlay{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;z-index:10;opacity:0;transition:opacity .6s}
+.overlay.active{opacity:1;pointer-events:auto}
+
+.title-screen{background:rgba(6,14,26,.85)}
+.title-screen h1{font-family:Georgia,'Times New Roman','Hiragino Mincho Pro',serif;font-size:clamp(48px,10vw,96px);color:#ffd700;letter-spacing:8px;text-shadow:0 0 40px rgba(255,215,0,.4),0 0 80px rgba(255,150,0,.2);margin-bottom:4px}
+.title-screen .subtitle{font-family:Georgia,'Hiragino Mincho Pro',serif;font-size:clamp(14px,3vw,22px);color:#c4956a;letter-spacing:3px;margin-bottom:32px}
+.title-screen .desc{font-size:clamp(12px,2.5vw,16px);color:#7d8a9a;max-width:400px;text-align:center;line-height:1.8;margin-bottom:48px;padding:0 20px}
+.start-btn{background:linear-gradient(135deg,#ffd700,#e6a800);color:#1a0a00;border:none;padding:14px 48px;font-size:18px;font-weight:700;border-radius:40px;cursor:pointer;letter-spacing:2px;transition:transform .2s,box-shadow .2s;box-shadow:0 4px 20px rgba(255,215,0,.3)}
+.start-btn:hover{transform:scale(1.05);box-shadow:0 6px 30px rgba(255,215,0,.5)}
+.start-btn:active{transform:scale(.97)}
+
+.lang-toggle{position:fixed;top:12px;right:12px;display:flex;gap:2px;background:rgba(20,30,50,.8);border:1px solid rgba(100,120,160,.3);border-radius:6px;padding:2px;z-index:20}
+.lang-btn{background:transparent;border:none;color:#7d8a9a;font-size:11px;font-weight:600;padding:4px 10px;border-radius:4px;cursor:pointer;transition:all .15s}
+.lang-btn.active{background:#ffd700;color:#1a0a00}
+
+.hud{position:fixed;top:0;left:0;width:100%;padding:14px 20px;display:flex;justify-content:space-between;align-items:flex-start;z-index:5;pointer-events:none;opacity:0;transition:opacity .3s}
+.hud.active{opacity:1}
+.hud-left,.hud-right{display:flex;flex-direction:column;gap:4px}
+.hud-right{align-items:flex-end}
+.hud-label{font-size:10px;color:#5a6a7a;letter-spacing:1px;text-transform:uppercase}
+.hud-value{font-family:Georgia,serif;font-size:24px;color:#ffd700;text-shadow:0 0 10px rgba(255,215,0,.3)}
+.hud-lives{display:flex;gap:4px;margin-top:2px}
+.hud-life{width:10px;height:10px;background:#ffd700;border-radius:50%;transition:opacity .3s}
+.hud-life.lost{opacity:.15}
+.wave-label{font-family:Georgia,serif;font-size:14px;color:#c4956a}
+.flash-indicator{display:flex;gap:3px;margin-top:4px}
+.flash-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,215,0,.2);border:1px solid rgba(255,215,0,.3);transition:all .3s}
+.flash-dot.ready{background:#ffd700;box-shadow:0 0 6px rgba(255,215,0,.5)}
+
+.wave-screen{background:rgba(6,14,26,.9)}
+.wave-screen .wave-num{font-family:Georgia,serif;font-size:clamp(20px,4vw,32px);color:#ffd700;letter-spacing:4px;margin-bottom:20px}
+.wave-screen .fact{font-size:clamp(13px,2.5vw,16px);color:#b0bec5;max-width:500px;text-align:center;line-height:1.9;padding:0 24px}
+
+.gameover-screen{background:rgba(6,14,26,.92)}
+.gameover-screen h2{font-family:Georgia,serif;font-size:clamp(32px,7vw,56px);color:#ffd700;letter-spacing:4px;margin-bottom:8px}
+.gameover-screen .final-score{font-size:clamp(16px,3vw,22px);color:#c4956a;margin-bottom:24px}
+.gameover-screen .stats{display:flex;gap:32px;margin-bottom:36px}
+.stat{text-align:center}
+.stat-val{font-family:Georgia,serif;font-size:28px;color:#e6edf3}
+.stat-label{font-size:11px;color:#5a6a7a;margin-top:2px}
+.stat-val.good{color:#4caf50}
+.stat-val.bad{color:#ef5350}
+
+.score-popup{position:fixed;pointer-events:none;font-family:Georgia,serif;font-weight:700;z-index:8;animation:popUp .8s ease-out forwards}
+@keyframes popUp{0%{opacity:1;transform:translateY(0) scale(1)}100%{opacity:0;transform:translateY(-40px) scale(1.2)}}
+</style>
+</head>
+<body>
+
+<div class="lang-toggle">
+  <button class="lang-btn active" data-lang="ja">JA</button>
+  <button class="lang-btn" data-lang="en">EN</button>
+</div>
+
+<canvas id="c"></canvas>
+
+<div class="hud" id="hud">
+  <div class="hud-left">
+    <div class="hud-label" data-i18n="score">スコア</div>
+    <div class="hud-value" id="scoreVal">0</div>
+    <div class="hud-label" data-i18n="flash">フラッシュ</div>
+    <div class="flash-indicator" id="flashInd"></div>
+  </div>
+  <div class="hud-right">
+    <div class="wave-label" id="waveLabel"></div>
+    <div class="hud-label" data-i18n="ships">船</div>
+    <div class="hud-lives" id="livesBar"></div>
+  </div>
+</div>
+
+<div class="overlay title-screen active" id="titleScreen">
+  <h1>PHAROS</h1>
+  <div class="subtitle" data-i18n="titleSub">ファロスの灯台 — 紀元前280年</div>
+  <div class="desc" data-i18n="titleDesc">古代アレクサンドリアの灯台から光を放ち、暗闇の海を渡る船を安全に港へ導こう。</div>
+  <button class="start-btn" data-i18n="startBtn">始める</button>
+</div>
+
+<div class="overlay wave-screen" id="waveScreen">
+  <div class="wave-num" id="waveNum"></div>
+  <div class="fact" id="waveFact"></div>
+</div>
+
+<div class="overlay gameover-screen" id="gameoverScreen">
+  <h2 data-i18n="gameOver">終了</h2>
+  <div class="final-score" id="finalScore"></div>
+  <div class="stats">
+    <div class="stat"><div class="stat-val good" id="statSaved">0</div><div class="stat-label" data-i18n="saved">救出</div></div>
+    <div class="stat"><div class="stat-val bad" id="statLost">0</div><div class="stat-label" data-i18n="lost">難破</div></div>
+  </div>
+  <button class="start-btn" data-i18n="retryBtn">もう一度</button>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H, dpr;
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── i18n ──
+let lang = 'ja';
+const I = {
+  ja: {
+    score: 'スコア', flash: 'フラッシュ', ships: '船',
+    titleSub: 'ファロスの灯台 — 紀元前280年',
+    titleDesc: '古代アレクサンドリアの灯台から光を放ち、暗闇の海を渡る船を安全に港へ導こう。タップで光を向け、長押しで集中照射。',
+    startBtn: '始める', gameOver: '終了', saved: '救出', lost: '難破', retryBtn: 'もう一度',
+    wave: '第{n}波', scoreFmt: '{n} 点',
+  },
+  en: {
+    score: 'SCORE', flash: 'FLASH', ships: 'SHIPS',
+    titleSub: 'Pharos Lighthouse — 280 BC',
+    titleDesc: 'Aim the ancient lighthouse beam to guide ships safely into the harbor of Alexandria. Tap to aim, hold to focus.',
+    startBtn: 'START', gameOver: 'GAME OVER', saved: 'Saved', lost: 'Lost', retryBtn: 'RETRY',
+    wave: 'Wave {n}', scoreFmt: '{n} pts',
+  }
+};
+
+function t(key, vars) {
+  let s = (I[lang] && I[lang][key]) || key;
+  if (vars) Object.keys(vars).forEach(k => s = s.replace('{' + k + '}', vars[k]));
+  return s;
+}
+
+function applyLang() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (I[lang][key]) el.textContent = I[lang][key];
+  });
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+}
+
+document.querySelectorAll('.lang-btn').forEach(b => {
+  b.addEventListener('click', () => { lang = b.dataset.lang; applyLang(); });
+});
+
+// ── Historical facts ──
+const facts = [
+  { ja: 'ファロスの灯台は「古代世界の七不思議」のひとつ。紀元前280年頃、プトレマイオス2世の治世に完成した。',
+    en: 'The Pharos was one of the Seven Wonders of the Ancient World, completed around 280 BC under Ptolemy II Philadelphus.' },
+  { ja: '高さは約120〜137メートル。中世まで、地球上で最も高い人工建造物のひとつだった。',
+    en: 'Standing 120–137 m tall, it was among the tallest man-made structures on Earth until the Middle Ages.' },
+  { ja: '頂上の巨大な鏡（青銅製と推定）が昼は太陽光を、夜は炎を50km先の海上まで届けた。',
+    en: 'A polished bronze mirror at the top reflected sunlight by day and firelight by night — visible over 50 km away.' },
+  { ja: '建設費は推定800タラントン。現在の貨幣価値で約3億ドルに相当するとされる。',
+    en: 'Construction cost an estimated 800 talents of silver — roughly $300 million in today\'s currency.' },
+  { ja: '設計者はクニドスのソストラトス。彼は自分の名前を壁に刻み、漆喰で隠したという逸話が残る。',
+    en: 'The architect Sostratus of Cnidus reportedly carved his name into the wall and hid it under plaster.' },
+  { ja: '灯台は約1,500年間も機能し続けたが、956年と1303年の大地震で徐々に崩壊した。',
+    en: 'The lighthouse functioned for nearly 1,500 years before earthquakes in 956 and 1303 gradually destroyed it.' },
+  { ja: '三層構造が特徴的で、下から四角形・八角形・円形の塔が積み重なっていた。',
+    en: 'It had three distinctive tiers: a square base, an octagonal middle section, and a circular top.' },
+  { ja: '1994年、フランスの考古学者がアレクサンドリア港の海底で灯台の遺構を発見した。',
+    en: 'In 1994, French archaeologists discovered remains of the lighthouse on the seabed of Alexandria\'s harbor.' },
+];
+
+// ── Game State ──
+const S = {
+  phase: 'title',
+  score: 0, combo: 0,
+  wave: 0, maxLives: 5, lives: 5,
+  ships: [], rocks: [], particles: [], fogPatches: [],
+  beam: { angle: -Math.PI / 4, spread: 0.22, flashing: false, flashTimer: 0 },
+  flashCharges: 3, maxFlashCharges: 3, flashCooldown: 0,
+  shipsSaved: 0, shipsLost: 0,
+  waveShipsLeft: 0, waveShipsTotal: 0,
+  mouseX: 0, mouseY: 0, touching: false,
+  time: 0, waveTimer: 0, spawnTimer: 0,
+  shakeX: 0, shakeY: 0, shakeDur: 0,
+};
+
+// ── Layout (fractions) ──
+const LH = { xf: 0.08, yf: 0.82 };
+const HARBOR = { xf: 0.35, yf: 0.93, widthF: 0.08 };
+const HORIZON_F = 0.28;
+const SHORE_F = 0.90;
+
+function lhX() { return W * LH.xf; }
+function lhY() { return H * LH.yf; }
+function lhTopY() { return H * LH.yf - H * 0.32; }
+function harborX() { return W * HARBOR.xf; }
+function harborY() { return H * HARBOR.yf; }
+function harborW() { return W * HARBOR.widthF; }
+function horizonY() { return H * HORIZON_F; }
+function shoreY() { return H * SHORE_F; }
+
+// ── Stars ──
+const stars = [];
+function initStars() {
+  stars.length = 0;
+  for (let i = 0; i < 200; i++) {
+    stars.push({
+      x: Math.random(), y: Math.random() * HORIZON_F,
+      r: Math.random() * 1.5 + 0.3,
+      phase: Math.random() * Math.PI * 2,
+      speed: Math.random() * 0.5 + 0.3
+    });
+  }
+}
+initStars();
+
+// ── Rocks ──
+function initRocks() {
+  S.rocks = [];
+  const harborLeft = HARBOR.xf - HARBOR.widthF / 2;
+  const harborRight = HARBOR.xf + HARBOR.widthF / 2;
+  for (let i = 0; i < 30; i++) {
+    let xf = Math.random() * 0.95 + 0.02;
+    if (xf > harborLeft - 0.02 && xf < harborRight + 0.02) continue;
+    if (xf < LH.xf + 0.03 && Math.random() < 0.5) continue;
+    S.rocks.push({
+      xf, yf: SHORE_F + Math.random() * 0.04 - 0.01,
+      r: Math.random() * 12 + 6,
+      shade: Math.random() * 30 + 20
+    });
+  }
+}
+initRocks();
+
+// ── Ship ──
+function createShip(wave) {
+  const fromTop = Math.random() < 0.4;
+  let x, y, heading;
+  if (fromTop) {
+    x = W * (0.2 + Math.random() * 0.75);
+    y = -20;
+    heading = Math.PI / 2 + (Math.random() - 0.5) * 0.6;
+  } else {
+    x = W + 20;
+    y = horizonY() + Math.random() * (shoreY() - horizonY() - 40);
+    heading = Math.PI + (Math.random() - 0.5) * 0.8;
+  }
+  const baseSpeed = 25 + wave * 3;
+  return {
+    x, y, heading,
+    speed: baseSpeed + Math.random() * 15,
+    illumination: 0,
+    guided: false, docked: false, crashed: false,
+    size: 0.8 + Math.random() * 0.5,
+    bobPhase: Math.random() * Math.PI * 2,
+    type: 'merchant',
+    guidedProgress: 0,
+  };
+}
+
+// ── Fog ──
+function createFog() {
+  return {
+    x: W + 100,
+    y: horizonY() + Math.random() * (shoreY() - horizonY()),
+    r: 80 + Math.random() * 120,
+    speed: 15 + Math.random() * 20,
+    opacity: 0.4 + Math.random() * 0.3,
+  };
+}
+
+// ── Particles ──
+function addParticle(x, y, color, vx, vy, life) {
+  if (S.particles.length > 300) return;
+  S.particles.push({ x, y, color, vx: vx || 0, vy: vy || 0, life, maxLife: life, r: Math.random() * 3 + 1 });
+}
+
+// ── Wave config ──
+function waveConfig(n) {
+  return {
+    ships: Math.min(3 + n * 2, 20),
+    spawnInterval: Math.max(3.5 - n * 0.15, 1.0),
+    beamSpread: Math.max(0.22 - n * 0.008, 0.10),
+    fogCount: n >= 3 ? Math.min(n - 2, 5) : 0,
+    stormChance: n >= 5 ? 0.3 : 0,
+    illuminationRequired: Math.min(1.2 + n * 0.1, 2.5),
+  };
+}
+
+// ── Game Logic ──
+function startWave() {
+  const cfg = waveConfig(S.wave);
+  S.beam.spread = cfg.beamSpread;
+  S.waveShipsLeft = cfg.ships;
+  S.waveShipsTotal = cfg.ships;
+  S.spawnTimer = 0.5;
+  S.fogPatches = [];
+  for (let i = 0; i < cfg.fogCount; i++) S.fogPatches.push(createFog());
+}
+
+function showWaveScreen() {
+  S.phase = 'waveTransition';
+  const fact = facts[(S.wave - 1) % facts.length];
+  document.getElementById('waveNum').textContent = t('wave', { n: S.wave });
+  document.getElementById('waveFact').textContent = fact[lang];
+  document.getElementById('waveScreen').classList.add('active');
+  setTimeout(() => {
+    document.getElementById('waveScreen').classList.remove('active');
+    S.phase = 'playing';
+    startWave();
+  }, 3500);
+}
+
+function startGame() {
+  S.score = 0; S.combo = 0;
+  S.wave = 0; S.lives = S.maxLives;
+  S.ships = []; S.particles = []; S.fogPatches = [];
+  S.shipsSaved = 0; S.shipsLost = 0;
+  S.flashCharges = S.maxFlashCharges; S.flashCooldown = 0;
+  initRocks();
+  document.getElementById('titleScreen').classList.remove('active');
+  document.getElementById('gameoverScreen').classList.remove('active');
+  document.getElementById('hud').classList.add('active');
+  updateHUD();
+  nextWave();
+}
+
+function nextWave() {
+  S.wave++;
+  showWaveScreen();
+}
+
+function gameOver() {
+  S.phase = 'gameover';
+  document.getElementById('hud').classList.remove('active');
+  document.getElementById('finalScore').textContent = t('scoreFmt', { n: S.score });
+  document.getElementById('statSaved').textContent = S.shipsSaved;
+  document.getElementById('statLost').textContent = S.shipsLost;
+  document.getElementById('gameoverScreen').classList.add('active');
+}
+
+function showScorePopup(x, y, text, color) {
+  const el = document.createElement('div');
+  el.className = 'score-popup';
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  el.style.color = color;
+  el.style.fontSize = '20px';
+  el.textContent = text;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 800);
+}
+
+function updateHUD() {
+  document.getElementById('scoreVal').textContent = S.score;
+  document.getElementById('waveLabel').textContent = t('wave', { n: S.wave });
+  let livesHTML = '';
+  for (let i = 0; i < S.maxLives; i++) livesHTML += `<div class="hud-life${i >= S.lives ? ' lost' : ''}"></div>`;
+  document.getElementById('livesBar').innerHTML = livesHTML;
+  let flashHTML = '';
+  for (let i = 0; i < S.maxFlashCharges; i++) flashHTML += `<div class="flash-dot${i < S.flashCharges ? ' ready' : ''}"></div>`;
+  document.getElementById('flashInd').innerHTML = flashHTML;
+}
+
+function screenShake(intensity) {
+  S.shakeDur = 0.3;
+  S.shakeX = (Math.random() - 0.5) * intensity;
+  S.shakeY = (Math.random() - 0.5) * intensity;
+}
+
+// ── Collision ──
+function isInBeam(x, y) {
+  const dx = x - lhX();
+  const dy = y - lhTopY();
+  const angle = Math.atan2(dy, dx);
+  let diff = angle - S.beam.angle;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  const spread = S.beam.flashing ? S.beam.spread * 1.8 : S.beam.spread;
+  return Math.abs(diff) < spread;
+}
+
+function hitRock(sx, sy, sr) {
+  for (const rock of S.rocks) {
+    const rx = rock.xf * W, ry = rock.yf * H;
+    const dist = Math.hypot(sx - rx, sy - ry);
+    if (dist < sr + rock.r) return true;
+  }
+  return false;
+}
+
+function inHarbor(sx, sy) {
+  const hx = harborX(), hy = harborY(), hw = harborW();
+  return sx > hx - hw && sx < hx + hw && sy > hy - 15;
+}
+
+// ── Update ──
+function update(dt) {
+  if (S.phase !== 'playing') return;
+  S.time += dt;
+
+  // Beam angle
+  const tx = S.mouseX, ty = S.mouseY;
+  const targetAngle = Math.atan2(ty - lhTopY(), tx - lhX());
+  let angleDiff = targetAngle - S.beam.angle;
+  while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+  while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+  S.beam.angle += angleDiff * Math.min(dt * 8, 1);
+
+  // Flash
+  if (S.beam.flashing) {
+    S.beam.flashTimer -= dt;
+    if (S.beam.flashTimer <= 0) S.beam.flashing = false;
+  }
+  if (S.flashCooldown > 0) {
+    S.flashCooldown -= dt;
+    if (S.flashCooldown <= 0 && S.flashCharges < S.maxFlashCharges) {
+      S.flashCharges++;
+      S.flashCooldown = S.flashCharges < S.maxFlashCharges ? 4.0 : 0;
+      updateHUD();
+    }
+  }
+
+  // Shake
+  if (S.shakeDur > 0) {
+    S.shakeDur -= dt;
+    S.shakeX *= 0.9;
+    S.shakeY *= 0.9;
+  } else {
+    S.shakeX = 0; S.shakeY = 0;
+  }
+
+  // Spawn ships
+  if (S.waveShipsLeft > 0) {
+    S.spawnTimer -= dt;
+    if (S.spawnTimer <= 0) {
+      S.ships.push(createShip(S.wave));
+      S.waveShipsLeft--;
+      S.spawnTimer = waveConfig(S.wave).spawnInterval * (0.7 + Math.random() * 0.6);
+    }
+  }
+
+  // Fog
+  for (const fog of S.fogPatches) {
+    fog.x -= fog.speed * dt;
+    if (fog.x < -fog.r * 2) {
+      fog.x = W + fog.r * 2;
+      fog.y = horizonY() + Math.random() * (shoreY() - horizonY());
+    }
+  }
+
+  // Update ships
+  const cfg = waveConfig(S.wave);
+  const toRemove = [];
+  for (let i = 0; i < S.ships.length; i++) {
+    const ship = S.ships[i];
+    if (ship.docked || ship.crashed) continue;
+
+    ship.bobPhase += dt * 2;
+    const inBeam = isInBeam(ship.x, ship.y);
+
+    // Check fog blocking
+    let fogBlocked = false;
+    for (const fog of S.fogPatches) {
+      if (Math.hypot(ship.x - fog.x, ship.y - fog.y) < fog.r) {
+        fogBlocked = true;
+        break;
+      }
+    }
+
+    const illuminated = inBeam && !fogBlocked && ship.y > horizonY() - 20;
+
+    if (illuminated && !ship.guided) {
+      ship.illumination = Math.min(ship.illumination + dt, cfg.illuminationRequired);
+      if (ship.illumination >= cfg.illuminationRequired) {
+        ship.guided = true;
+        S.combo++;
+        const bonus = 50 * S.combo;
+        S.score += 100 + bonus;
+        showScorePopup(ship.x, ship.y - 20, `+${100 + bonus}`, '#ffd700');
+        updateHUD();
+        for (let p = 0; p < 12; p++) {
+          addParticle(ship.x, ship.y, '#ffd700',
+            (Math.random() - 0.5) * 60, (Math.random() - 0.5) * 60, 0.8);
+        }
+      }
+    } else if (!ship.guided) {
+      ship.illumination = Math.max(ship.illumination - dt * 0.5, 0);
+    }
+
+    if (ship.guided) {
+      const tx = harborX(), ty = harborY();
+      const targetH = Math.atan2(ty - ship.y, tx - ship.x);
+      let hd = targetH - ship.heading;
+      while (hd > Math.PI) hd -= Math.PI * 2;
+      while (hd < -Math.PI) hd += Math.PI * 2;
+      ship.heading += Math.sign(hd) * Math.min(Math.abs(hd), dt * 2.5);
+    }
+
+    ship.x += Math.cos(ship.heading) * ship.speed * dt;
+    ship.y += Math.sin(ship.heading) * ship.speed * dt;
+
+    if (ship.guided && inHarbor(ship.x, ship.y)) {
+      ship.docked = true;
+      S.shipsSaved++;
+      for (let p = 0; p < 8; p++) {
+        addParticle(ship.x, ship.y, '#4caf50',
+          (Math.random() - 0.5) * 40, -Math.random() * 30, 1.0);
+      }
+      toRemove.push(i);
+      continue;
+    }
+
+    const shipR = 10 * ship.size;
+    if (!ship.guided && hitRock(ship.x, ship.y, shipR)) {
+      ship.crashed = true;
+      S.shipsLost++;
+      S.lives--;
+      S.combo = 0;
+      screenShake(8);
+      showScorePopup(ship.x, ship.y - 20, lang === 'ja' ? '難破!' : 'CRASH!', '#ef5350');
+      for (let p = 0; p < 20; p++) {
+        addParticle(ship.x, ship.y, '#ef5350',
+          (Math.random() - 0.5) * 80, (Math.random() - 0.5) * 80, 1.2);
+      }
+      for (let p = 0; p < 15; p++) {
+        addParticle(ship.x, ship.y, '#8B6914',
+          (Math.random() - 0.5) * 50, -Math.random() * 40, 1.5);
+      }
+      updateHUD();
+      toRemove.push(i);
+      if (S.lives <= 0) { gameOver(); return; }
+      continue;
+    }
+
+    if (ship.y > H + 30 || ship.x < -50) {
+      if (!ship.guided) {
+        S.shipsLost++;
+        S.lives--;
+        S.combo = 0;
+        updateHUD();
+        if (S.lives <= 0) { gameOver(); return; }
+      }
+      toRemove.push(i);
+    }
+  }
+
+  for (let i = toRemove.length - 1; i >= 0; i--) {
+    S.ships.splice(toRemove[i], 1);
+  }
+
+  // Check wave complete
+  if (S.waveShipsLeft <= 0 && S.ships.length === 0 && S.phase === 'playing') {
+    nextWave();
+  }
+
+  // Particles
+  for (let i = S.particles.length - 1; i >= 0; i--) {
+    const p = S.particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += 30 * dt;
+    p.life -= dt;
+    if (p.life <= 0) S.particles.splice(i, 1);
+  }
+
+  // Fire particles
+  if (Math.random() < 0.4) {
+    const fx = lhX() + (Math.random() - 0.5) * 8;
+    const fy = lhTopY();
+    addParticle(fx, fy, Math.random() < 0.5 ? '#ffa500' : '#ffdd00',
+      (Math.random() - 0.5) * 15, -Math.random() * 30 - 10, 0.6 + Math.random() * 0.4);
+  }
+}
+
+// ── Render ──
+function render() {
+  ctx.save();
+  ctx.translate(S.shakeX, S.shakeY);
+
+  // Sky
+  const skyGrad = ctx.createLinearGradient(0, 0, 0, horizonY());
+  skyGrad.addColorStop(0, '#050a18');
+  skyGrad.addColorStop(0.7, '#0a1028');
+  skyGrad.addColorStop(1, '#0d1838');
+  ctx.fillStyle = skyGrad;
+  ctx.fillRect(0, 0, W, horizonY());
+
+  // Stars
+  for (const star of stars) {
+    const twinkle = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(S.time * star.speed + star.phase));
+    ctx.globalAlpha = twinkle;
+    ctx.fillStyle = '#e8e0ff';
+    ctx.beginPath();
+    ctx.arc(star.x * W, star.y * H, star.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // Sea
+  const seaGrad = ctx.createLinearGradient(0, horizonY(), 0, H);
+  seaGrad.addColorStop(0, '#0d1f40');
+  seaGrad.addColorStop(0.4, '#091830');
+  seaGrad.addColorStop(1, '#060e1a');
+  ctx.fillStyle = seaGrad;
+  ctx.fillRect(0, horizonY(), W, H - horizonY());
+
+  // Wave lines
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 10; i++) {
+    const baseY = horizonY() + (shoreY() - horizonY()) * (i / 10);
+    const alpha = 0.06 + (1 - i / 10) * 0.06;
+    ctx.strokeStyle = `rgba(100,150,220,${alpha})`;
+    ctx.beginPath();
+    for (let x = 0; x < W; x += 3) {
+      const wave = Math.sin(x * 0.004 + S.time * (0.8 + i * 0.15) + i * 1.5) * (2.5 - i * 0.15);
+      if (x === 0) ctx.moveTo(x, baseY + wave); else ctx.lineTo(x, baseY + wave);
+    }
+    ctx.stroke();
+  }
+
+  // Beam (behind ships)
+  drawBeam();
+
+  // Rocks
+  for (const rock of S.rocks) {
+    const rx = rock.xf * W, ry = rock.yf * H;
+    ctx.fillStyle = `rgb(${rock.shade},${rock.shade + 5},${rock.shade + 15})`;
+    ctx.beginPath();
+    ctx.arc(rx, ry, rock.r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(${rock.shade + 20},${rock.shade + 25},${rock.shade + 35},0.5)`;
+    ctx.beginPath();
+    ctx.arc(rx - rock.r * 0.2, ry - rock.r * 0.3, rock.r * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Harbor markers (torches)
+  const hx = harborX(), hw = harborW();
+  for (const ox of [-hw, hw]) {
+    const tx = hx + ox, ty = shoreY() - 5;
+    const torchGlow = ctx.createRadialGradient(tx, ty, 0, tx, ty, 20);
+    torchGlow.addColorStop(0, 'rgba(255,150,50,0.6)');
+    torchGlow.addColorStop(1, 'rgba(255,100,0,0)');
+    ctx.fillStyle = torchGlow;
+    ctx.fillRect(tx - 20, ty - 20, 40, 40);
+    ctx.fillStyle = '#ff9933';
+    ctx.beginPath();
+    ctx.arc(tx, ty, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Shore ground
+  ctx.fillStyle = '#1a1a2a';
+  ctx.fillRect(0, shoreY() + 8, W, H - shoreY());
+
+  // Ships
+  for (const ship of S.ships) {
+    drawShip(ship);
+  }
+
+  // Fog
+  for (const fog of S.fogPatches) {
+    const fogGrad = ctx.createRadialGradient(fog.x, fog.y, 0, fog.x, fog.y, fog.r);
+    fogGrad.addColorStop(0, `rgba(40,50,70,${fog.opacity})`);
+    fogGrad.addColorStop(0.6, `rgba(30,40,60,${fog.opacity * 0.5})`);
+    fogGrad.addColorStop(1, 'rgba(20,30,50,0)');
+    ctx.fillStyle = fogGrad;
+    ctx.beginPath();
+    ctx.arc(fog.x, fog.y, fog.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Lighthouse
+  drawLighthouse();
+
+  // Particles
+  for (const p of S.particles) {
+    ctx.globalAlpha = p.life / p.maxLife;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * (p.life / p.maxLife), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  ctx.restore();
+}
+
+function drawBeam() {
+  const ox = lhX(), oy = lhTopY();
+  const spread = S.beam.flashing ? S.beam.spread * 1.8 : S.beam.spread;
+  const beamLen = Math.max(W, H) * 1.5;
+  const intensity = S.beam.flashing ? 0.35 : 0.2;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+
+  // Main beam cone
+  const grad = ctx.createRadialGradient(ox, oy, 5, ox, oy, beamLen);
+  grad.addColorStop(0, `rgba(255,220,100,${intensity})`);
+  grad.addColorStop(0.3, `rgba(255,200,60,${intensity * 0.6})`);
+  grad.addColorStop(0.7, `rgba(255,180,40,${intensity * 0.2})`);
+  grad.addColorStop(1, 'rgba(255,160,20,0)');
+
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.moveTo(ox, oy);
+  ctx.arc(ox, oy, beamLen, S.beam.angle - spread, S.beam.angle + spread);
+  ctx.closePath();
+  ctx.fill();
+
+  // Bright center line
+  const cx = ox + Math.cos(S.beam.angle) * beamLen;
+  const cy = oy + Math.sin(S.beam.angle) * beamLen;
+  ctx.strokeStyle = `rgba(255,240,180,${intensity * 0.4})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(ox, oy);
+  ctx.lineTo(cx, cy);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawLighthouse() {
+  const bx = lhX(), by = lhY();
+  const h = H * 0.32;
+  const baseW = h * 0.18;
+  const midW = h * 0.13;
+  const topW = h * 0.09;
+
+  // Cliff/platform
+  ctx.fillStyle = '#1a1a2e';
+  ctx.beginPath();
+  ctx.moveTo(0, by + 10);
+  ctx.lineTo(bx + baseW * 1.5, by + 10);
+  ctx.lineTo(bx + baseW * 2, H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#242440';
+  ctx.beginPath();
+  ctx.moveTo(0, by + 5);
+  ctx.lineTo(bx + baseW * 1.5, by + 5);
+  ctx.quadraticCurveTo(bx + baseW * 2, by + 20, bx + baseW * 2.5, shoreY());
+  ctx.lineTo(0, shoreY());
+  ctx.closePath();
+  ctx.fill();
+
+  // Base tier (square)
+  const baseH = h * 0.50;
+  ctx.fillStyle = '#6B5B45';
+  ctx.beginPath();
+  ctx.moveTo(bx - baseW, by);
+  ctx.lineTo(bx - midW, by - baseH);
+  ctx.lineTo(bx + midW, by - baseH);
+  ctx.lineTo(bx + baseW, by);
+  ctx.closePath();
+  ctx.fill();
+
+  // Stone lines
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 8; i++) {
+    const t = i / 8;
+    const ly = by - baseH * t;
+    const lw = baseW - (baseW - midW) * t;
+    ctx.beginPath();
+    ctx.moveTo(bx - lw, ly);
+    ctx.lineTo(bx + lw, ly);
+    ctx.stroke();
+  }
+
+  // Middle tier (octagonal)
+  const midH = h * 0.30;
+  ctx.fillStyle = '#7B6B55';
+  ctx.beginPath();
+  ctx.moveTo(bx - midW, by - baseH);
+  ctx.lineTo(bx - topW, by - baseH - midH);
+  ctx.lineTo(bx + topW, by - baseH - midH);
+  ctx.lineTo(bx + midW, by - baseH);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+  for (let i = 1; i < 5; i++) {
+    const t = i / 5;
+    const ly = by - baseH - midH * t;
+    const lw = midW - (midW - topW) * t;
+    ctx.beginPath();
+    ctx.moveTo(bx - lw, ly);
+    ctx.lineTo(bx + lw, ly);
+    ctx.stroke();
+  }
+
+  // Platform
+  ctx.fillStyle = '#5B4B35';
+  ctx.fillRect(bx - topW * 1.5, by - baseH - midH - 3, topW * 3, 6);
+
+  // Top tier (lantern room)
+  const topH = h * 0.12;
+  ctx.fillStyle = '#8B7B65';
+  ctx.beginPath();
+  ctx.moveTo(bx - topW, by - baseH - midH);
+  ctx.lineTo(bx - topW * 0.7, by - baseH - midH - topH);
+  ctx.lineTo(bx + topW * 0.7, by - baseH - midH - topH);
+  ctx.lineTo(bx + topW, by - baseH - midH);
+  ctx.closePath();
+  ctx.fill();
+
+  // Cap
+  ctx.fillStyle = '#5B4B35';
+  ctx.beginPath();
+  ctx.moveTo(bx - topW * 0.9, by - baseH - midH - topH);
+  ctx.lineTo(bx, by - baseH - midH - topH - 8);
+  ctx.lineTo(bx + topW * 0.9, by - baseH - midH - topH);
+  ctx.closePath();
+  ctx.fill();
+
+  // Fire glow
+  const fireX = bx, fireY = lhTopY();
+  const glowR = 30 + Math.sin(S.time * 5) * 5;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const fireGrad = ctx.createRadialGradient(fireX, fireY, 2, fireX, fireY, glowR);
+  fireGrad.addColorStop(0, 'rgba(255,200,50,0.9)');
+  fireGrad.addColorStop(0.3, 'rgba(255,150,30,0.5)');
+  fireGrad.addColorStop(0.6, 'rgba(255,100,0,0.2)');
+  fireGrad.addColorStop(1, 'rgba(255,80,0,0)');
+  ctx.fillStyle = fireGrad;
+  ctx.beginPath();
+  ctx.arc(fireX, fireY, glowR, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Core flame
+  ctx.fillStyle = '#fff8e0';
+  ctx.beginPath();
+  ctx.arc(fireX, fireY, 4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawShip(ship) {
+  const { x, y, heading, size, illumination, guided, bobPhase } = ship;
+  const bob = Math.sin(bobPhase) * 2;
+  const cfg = waveConfig(S.wave);
+  const illFrac = Math.min(illumination / cfg.illuminationRequired, 1);
+
+  ctx.save();
+  ctx.translate(x, y + bob);
+  ctx.rotate(heading);
+
+  const s = 12 * size;
+
+  // Glow when illuminated
+  if (illFrac > 0) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const glow = ctx.createRadialGradient(0, 0, s, 0, 0, s * 3);
+    glow.addColorStop(0, `rgba(255,215,0,${illFrac * 0.3})`);
+    glow.addColorStop(1, 'rgba(255,215,0,0)');
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(0, 0, s * 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Hull
+  const hullColor = guided ? '#D4A76A' : illFrac > 0 ? lerpColor('#3a3a5a', '#D4A76A', illFrac) : '#3a3a5a';
+  ctx.fillStyle = hullColor;
+  ctx.beginPath();
+  ctx.moveTo(s * 1.2, 0);
+  ctx.lineTo(s * 0.4, s * 0.5);
+  ctx.lineTo(-s, s * 0.4);
+  ctx.lineTo(-s * 1.2, 0);
+  ctx.lineTo(-s, -s * 0.4);
+  ctx.lineTo(s * 0.4, -s * 0.5);
+  ctx.closePath();
+  ctx.fill();
+
+  // Sail
+  const sailColor = guided ? '#FFE4B5' : illFrac > 0 ? lerpColor('#2a2a4a', '#FFE4B5', illFrac) : '#2a2a4a';
+  ctx.fillStyle = sailColor;
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.2, 0);
+  ctx.lineTo(s * 0.1, -s * 1.2);
+  ctx.lineTo(s * 0.5, -s * 0.1);
+  ctx.closePath();
+  ctx.fill();
+
+  // Progress ring (when being illuminated)
+  if (illFrac > 0 && !guided) {
+    ctx.strokeStyle = `rgba(255,215,0,${0.3 + illFrac * 0.5})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, s * 1.8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * illFrac);
+    ctx.stroke();
+  }
+
+  // Guided indicator
+  if (guided) {
+    ctx.strokeStyle = 'rgba(255,215,0,0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.arc(0, 0, s * 2, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  ctx.restore();
+}
+
+function lerpColor(a, b, t) {
+  const ah = parseInt(a.slice(1), 16);
+  const bh = parseInt(b.slice(1), 16);
+  const ar = (ah >> 16) & 0xff, ag = (ah >> 8) & 0xff, ab = ah & 0xff;
+  const br = (bh >> 16) & 0xff, bg = (bh >> 8) & 0xff, bb = bh & 0xff;
+  const rr = Math.round(ar + (br - ar) * t);
+  const rg = Math.round(ag + (bg - ag) * t);
+  const rb = Math.round(ab + (bb - ab) * t);
+  return `rgb(${rr},${rg},${rb})`;
+}
+
+// ── Input ──
+function onPointerMove(px, py) {
+  S.mouseX = px;
+  S.mouseY = py;
+}
+
+function onFlash() {
+  if (S.flashCharges > 0 && !S.beam.flashing && S.phase === 'playing') {
+    S.beam.flashing = true;
+    S.beam.flashTimer = 0.5;
+    S.flashCharges--;
+    if (S.flashCooldown <= 0) S.flashCooldown = 4.0;
+    updateHUD();
+    for (let i = 0; i < 8; i++) {
+      addParticle(lhX(), lhTopY(), '#ffe080',
+        (Math.random() - 0.5) * 40, (Math.random() - 0.5) * 40, 0.4);
+    }
+  }
+}
+
+canvas.addEventListener('mousemove', e => onPointerMove(e.clientX, e.clientY));
+canvas.addEventListener('click', e => {
+  onPointerMove(e.clientX, e.clientY);
+  onFlash();
+});
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  onPointerMove(t.clientX, t.clientY);
+  S.touching = true;
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  onPointerMove(t.clientX, t.clientY);
+}, { passive: false });
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  if (S.touching) {
+    onFlash();
+    S.touching = false;
+  }
+}, { passive: false });
+
+// Start / retry buttons
+document.querySelectorAll('.start-btn').forEach(btn => {
+  btn.addEventListener('click', startGame);
+});
+
+// ── Game loop ──
+let lastTime = 0;
+function loop(timestamp) {
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+  lastTime = timestamp;
+
+  update(dt);
+  render();
+
+  requestAnimationFrame(loop);
+}
+
+// Initialize mouse to center-right
+S.mouseX = W * 0.6;
+S.mouseY = H * 0.4;
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
